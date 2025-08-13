@@ -7,6 +7,6 @@ mensagem =""
 while mensagem != "sair":
     mensagem = input("Digita uma mensagem para o servidor: ")
     cliente.send(mensagem.encode())
+    
 
-if mensagem == "sair":
-    cliente.close()
+cliente.close()
