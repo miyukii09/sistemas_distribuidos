@@ -1,53 +1,62 @@
 import socket
 import threading
 
-# Contador para identificar clientes
-contador_clientes = 0
-lock = threading.Lock()  # Para evitar condições de corrida ao incrementar o contador
-
 # Função para lidar com cada cliente em uma thread separada
-def lidar_com_cliente(conexao, endereco, cliente_id):
-    nome_cliente = f"Cliente {cliente_id}"
-    print(f"{nome_cliente} conectado em: {endereco}")
+def lidar_com_cliente(conexao, endereco):
+    try:
+        # Recebe o nome do cliente
+        nome_cliente = conexao.recv(1024).decode()
+        if not nome_cliente:  # Cliente desconectou antes de enviar o nome
+            nome_cliente = "Desconhecido"
+        print(f"{nome_cliente} conectado em: {endereco} (Thread: {threading.current_thread().name})")
 
-    mensagem = ""
-    while mensagem != "sair":
-        try:
-            mensagem = conexao.recv(1024).decode()
-            if not mensagem:  # Cliente desconectou
+        mensagem = ""
+        while mensagem != "sair":
+            try:
+                mensagem = conexao.recv(1024).decode()
+                if not mensagem:  # Cliente desconectou
+                    break
+                print("")
+                print(f"{nome_cliente}: {mensagem}")
+                # Envia resposta ao cliente
+                resposta = f"mensagem recebida: {mensagem}"
+                conexao.send(resposta.encode())
+            except Exception as e:
+                print(f"Erro ou {nome_cliente} desconectado: {e}")
                 break
-            print(f"Mensagem recebida do {nome_cliente}: {mensagem}")
-            # Envia resposta ao cliente
-            resposta = f"ola! recebi: {mensagem}"
-            conexao.send(resposta.encode())
-        except:
-            print(f"Erro ou {nome_cliente} {endereco} desconectado")
-            break
 
-    conexao.close()
-    print(f"Conexão com {nome_cliente} {endereco} fechada")
+        conexao.close()
+        print(f"Conexão com {nome_cliente} ({endereco}) fechada")
+    except Exception as e:
+        print(f"Erro ao processar cliente em {endereco}: {e}")
+        conexao.close()
 
 # Criando socket TCP/IP
 servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-servidor.bind(('localhost', 12345)) # IP e Porta 
-servidor.listen(5) # Aumentado para permitir mais conexões na fila
+# Permite reutilizar a porta
+servidor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-print("Agardando conexão...")
+try:
+    servidor.bind(('0.0.0.0', 12345)) # Escuta em todas as interfaces
+    servidor.listen(5)  # Permite mais conexões na fila
+    print("Aguardando conexões...")
+except Exception as e:
+    print(f"Erro ao iniciar o servidor: {e}")
+    servidor.close()
+    exit(1)
+
 while True:
     try:
         conexao, endereco = servidor.accept()
-        # Incrementa o contador de clientes com segurança
-        with lock:
-            contador_clientes += 1
-            cliente_id = contador_clientes
         # Cria uma thread para lidar com o cliente
-        thread = threading.Thread(target=lidar_com_cliente, args=(conexao, endereco, cliente_id))
+        thread = threading.Thread(target=lidar_com_cliente, args=(conexao, endereco))
         thread.start()
     except KeyboardInterrupt:
         print("\nServidor encerrado pelo usuário")
         break
-    except:
-        print("Erro ao aceitar conexão")
+    except Exception as e:
+        print(f"Erro ao aceitar conexão: {e}")
         break
 
 servidor.close()
+print("Servidor finalizado")
